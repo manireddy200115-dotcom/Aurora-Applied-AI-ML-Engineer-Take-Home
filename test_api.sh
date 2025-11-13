@@ -40,8 +40,5 @@ curl -s -X POST "$BASE_URL/ask" \
 echo ""
 echo ""
 
-# Test insights endpoint
-echo "5. Testing insights endpoint..."
-curl -s "$BASE_URL/insights" | python3 -m json.tool
-echo ""
+echo "All tests completed!"
 

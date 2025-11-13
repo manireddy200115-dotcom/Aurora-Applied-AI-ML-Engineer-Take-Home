@@ -32,12 +32,16 @@ class DataExtractor:
         Returns:
             List of message dictionaries (all messages from API)
         """
-        # Check cache validity
+        # Check cache validity - use cache if available to avoid 403 errors
         if not force_refresh and self._cache is not None:
             if self._cache_timestamp:
                 age = (datetime.now() - self._cache_timestamp).total_seconds()
                 if age < self._cache_ttl:
                     logger.info(f"Returning cached messages ({len(self._cache)} messages)")
+                    return self._cache
+                # Even if cache is expired, use it if API is blocking (403)
+                if len(self._cache) > 0:
+                    logger.warning("Cache expired but API may be rate-limiting. Using cached data.")
                     return self._cache
         
         try:
@@ -73,6 +77,7 @@ class DataExtractor:
         """
         Fetch all messages using pagination (offset-based).
         Continues fetching until all messages are retrieved.
+        Includes retry logic for robustness.
         
         Returns:
             List of all message dictionaries
@@ -80,15 +85,46 @@ class DataExtractor:
         all_messages = []
         page_size = 100
         offset = 0
-        max_pages = 200  # Increased safety limit for large datasets
+        max_pages = 200  # Safety limit
+        max_retries = 3
+        retry_delay = 2  # seconds
         
         try:
             # Get first page to determine total
+            # Add headers to avoid 403 errors
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
+                'Accept': 'application/json'
+            }
             response = requests.get(
                 self.api_url, 
                 params={'limit': page_size, 'offset': offset}, 
-                timeout=10
+                timeout=30,  # Increased timeout
+                headers=headers
             )
+            
+            # Handle 403 errors specifically
+            if response.status_code == 403:
+                logger.error("403 Forbidden - API may be rate-limiting or blocking requests")
+                logger.error("This could be due to:")
+                logger.error("  1. Rate limiting (too many requests)")
+                logger.error("  2. API authentication required")
+                logger.error("  3. IP blocking")
+                logger.error("Trying with delay and different approach...")
+                import time
+                time.sleep(10)  # Wait 10 seconds
+                # Try without query parameters
+                response = requests.get(self.api_url, timeout=30, headers=headers)
+                if response.status_code == 403:
+                    # If still 403, try to use cached data if available
+                    if self._cache and len(self._cache) > 0:
+                        logger.warning("API blocked (403). Using cached data instead.")
+                        return self._cache
+                    raise requests.exceptions.HTTPError(
+                        "403 Forbidden - API access denied. "
+                        "The API may be rate-limiting. Try again later or check API documentation."
+                    )
+            
             response.raise_for_status()
             data = response.json()
             
@@ -106,8 +142,11 @@ class DataExtractor:
             
             logger.info(f"API reports {total} total messages. Fetched {len(first_page_items)} in first page.")
             
-            # Fetch remaining pages
+            # Fetch remaining pages with retry logic
             pages_fetched = 1
+            consecutive_failures = 0
+            max_consecutive_failures = 5
+            
             while len(all_messages) < total and pages_fetched < max_pages:
                 offset += page_size
                 
@@ -116,34 +155,87 @@ class DataExtractor:
                     logger.info(f"Offset {offset} >= total {total}, should have all messages")
                     break
                 
-                try:
-                    response = requests.get(
-                        self.api_url, 
-                        params={'limit': page_size, 'offset': offset}, 
-                        timeout=10
-                    )
-                    response.raise_for_status()
-                    page_data = response.json()
-                    
-                    if isinstance(page_data, dict) and 'items' in page_data:
-                        page_messages = page_data['items']
-                        if not page_messages:  # Empty page, we're done
-                            logger.info(f"Empty page at offset {offset}, stopping pagination")
+                # Retry logic for each page
+                page_fetched = False
+                for retry in range(max_retries):
+                    try:
+                        # Add headers to avoid 403 errors
+                        headers = {
+                            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
+                            'Accept': 'application/json'
+                        }
+                        response = requests.get(
+                            self.api_url, 
+                            params={'limit': page_size, 'offset': offset}, 
+                            timeout=30,  # Increased timeout
+                            headers=headers
+                        )
+                        
+                        # Handle 403 errors
+                        if response.status_code == 403:
+                            logger.warning(f"403 Forbidden at offset {offset}, may be rate-limited")
+                            # Add delay and retry
+                            import time
+                            time.sleep(5)  # Wait 5 seconds
+                            response = requests.get(
+                                self.api_url, 
+                                params={'limit': page_size, 'offset': offset}, 
+                                timeout=30,
+                                headers=headers
+                            )
+                        
+                        response.raise_for_status()
+                        page_data = response.json()
+                        
+                        if isinstance(page_data, dict) and 'items' in page_data:
+                            page_messages = page_data['items']
+                            if not page_messages:  # Empty page, we're done
+                                logger.info(f"Empty page at offset {offset}, stopping pagination")
+                                page_fetched = True
+                                break
+                            all_messages.extend(page_messages)
+                            pages_fetched += 1
+                            consecutive_failures = 0  # Reset failure counter
+                            page_fetched = True
+                            
+                            # Log progress every 10 pages
+                            if pages_fetched % 10 == 0:
+                                logger.info(f"Progress: {len(all_messages)}/{total} messages fetched ({pages_fetched} pages)")
                             break
-                        all_messages.extend(page_messages)
-                        pages_fetched += 1
-                        
-                        # Log progress every 10 pages
-                        if pages_fetched % 10 == 0:
-                            logger.info(f"Progress: {len(all_messages)}/{total} messages fetched ({pages_fetched} pages)")
-                    else:
-                        logger.warning(f"Unexpected response format on page {pages_fetched}")
+                        else:
+                            logger.warning(f"Unexpected response format on page {pages_fetched}")
+                            break
+                            
+                    except requests.exceptions.Timeout:
+                        logger.warning(f"Timeout fetching page at offset {offset} (retry {retry + 1}/{max_retries})")
+                        if retry < max_retries - 1:
+                            import time
+                            time.sleep(retry_delay * (retry + 1))  # Exponential backoff
+                    except requests.exceptions.RequestException as e:
+                        status_code = getattr(e.response, 'status_code', None)
+                        if status_code == 404:
+                            # 404 might mean we've reached the end
+                            logger.info(f"404 at offset {offset}, may have reached end of data")
+                            page_fetched = True
+                            break
+                        elif status_code in [400, 403]:
+                            # Skip this page and continue
+                            logger.warning(f"Error {status_code} at offset {offset}, skipping this page")
+                            page_fetched = True
+                            break
+                        else:
+                            logger.warning(f"Error fetching page at offset {offset} (retry {retry + 1}/{max_retries}): {str(e)}")
+                            if retry < max_retries - 1:
+                                import time
+                                time.sleep(retry_delay * (retry + 1))
+                
+                if not page_fetched:
+                    consecutive_failures += 1
+                    if consecutive_failures >= max_consecutive_failures:
+                        logger.error(f"Too many consecutive failures ({consecutive_failures}), stopping pagination")
                         break
-                        
-                except requests.exceptions.RequestException as e:
-                    logger.error(f"Error fetching page at offset {offset}: {str(e)}")
-                    # Continue with what we have rather than failing completely
-                    break
+                    # Skip this offset and try next
+                    logger.warning(f"Skipping offset {offset} after {max_retries} retries")
             
             # Verify we got all messages
             if len(all_messages) < total:

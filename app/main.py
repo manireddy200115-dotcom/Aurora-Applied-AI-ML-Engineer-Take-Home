@@ -4,12 +4,10 @@ Main FastAPI application for the question-answering service.
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from typing import Optional
 import logging
 
 from app.rag_qa import RAGQASystem
 from app.extractor import DataExtractor
-from app.insights import DataInsights
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -31,10 +29,14 @@ app.add_middleware(
 )
 
 # Initialize components
+logger.info("Initializing data extractor and QA system...")
 extractor = DataExtractor()
-# Initialize QA system with SLM for answer generation
+
+# Initialize QA system: loads messages on-demand based on questions (more efficient)
+logger.info("Initializing QA system (messages loaded on-demand per question)...")
 qa_system = RAGQASystem(extractor, use_embeddings=True, use_slm=True)
-insights_analyzer = DataInsights(extractor)
+
+logger.info("✓ System ready: Messages will be loaded and embedded on-demand for each question")
 
 
 class QuestionRequest(BaseModel):
@@ -43,7 +45,6 @@ class QuestionRequest(BaseModel):
 
 class AnswerResponse(BaseModel):
     answer: str
-    confidence: float
 
 
 @app.get("/")
@@ -58,10 +59,25 @@ async def health():
     return {"status": "healthy"}
 
 
+@app.get("/status")
+async def status():
+    """Get system status including message count and embedding status."""
+    return {
+        "status": "ready",
+        "mode": "on-demand",  # Messages loaded on-demand per question
+        "embeddings_ready": qa_system.embedding_model is not None,
+        "slm_ready": qa_system.slm_pipeline is not None,
+        "extractor_cache": len(extractor._cache) if extractor._cache else 0
+    }
+
+
 @app.post("/ask", response_model=AnswerResponse)
 async def ask_question(request: QuestionRequest):
     """
     Answer a natural-language question about member data.
+    
+    The system retrieves top-k relevant messages using semantic embeddings,
+    then generates an answer using a Small Language Model (SLM).
     
     Example questions:
     - "When is Layla planning her trip to London?"
@@ -74,30 +90,34 @@ async def ask_question(request: QuestionRequest):
         
         logger.info(f"Received question: {request.question}")
         
-        # Get answer and confidence from QA system
-        answer, confidence = qa_system.answer(request.question)
+        # Get answer from QA system
+        answer, _ = qa_system.answer(request.question)
         
-        logger.info(f"Generated answer: {answer} (confidence: {confidence:.3f})")
+        logger.info(f"Generated answer: {answer}")
         
-        return AnswerResponse(answer=answer, confidence=confidence)
+        return AnswerResponse(answer=answer)
     
     except Exception as e:
         logger.error(f"Error processing question: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Error processing question: {str(e)}")
 
 
-@app.get("/insights")
-async def get_insights():
+@app.post("/refresh")
+async def refresh_data():
     """
-    Get data insights and anomalies analysis.
-    This endpoint analyzes the member data for quality issues and inconsistencies.
+    Manually refresh messages and recompute embeddings.
+    Useful when you want to force a refresh of the data cache.
     """
     try:
-        insights = insights_analyzer.analyze()
-        return insights
+        logger.info("Manual refresh requested")
+        qa_system._load_messages(force_refresh=True)
+        return {
+            "status": "success",
+            "message": f"Refreshed {len(qa_system.messages)} messages and recomputed embeddings"
+        }
     except Exception as e:
-        logger.error(f"Error generating insights: {str(e)}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Error generating insights: {str(e)}")
+        logger.error(f"Error refreshing data: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Error refreshing data: {str(e)}")
 
 
 if __name__ == "__main__":

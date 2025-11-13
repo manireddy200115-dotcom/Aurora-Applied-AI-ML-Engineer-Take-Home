@@ -47,40 +47,61 @@ question = st.text_input(
 # Ask button
 if st.button("Ask Question", type="primary", use_container_width=True):
     if question.strip():
-        with st.spinner("Thinking..."):
-            try:
-                response = requests.post(
-                    f"{API_URL}/ask",
-                    json={"question": question},
-                    timeout=10
-                )
-                response.raise_for_status()
-                data = response.json()
-                answer = data.get("answer", "No answer received")
-                confidence = data.get("confidence", 0.0)
-                
-                st.success("Answer:")
+        # Show progress message
+        progress_placeholder = st.empty()
+        progress_placeholder.info("🔄 Processing question... Loading relevant messages and computing embeddings (this may take 30-60 seconds for first request)")
+        
+        try:
+            # Increased timeout for on-demand message loading and embedding computation
+            response = requests.post(
+                f"{API_URL}/ask",
+                json={"question": question},
+                timeout=60  # Increased to 60 seconds for on-demand processing
+            )
+            progress_placeholder.empty()  # Clear progress message
+            response.raise_for_status()
+            data = response.json()
+            answer = data.get("answer", "No answer received")
+            
+            # Check if answer indicates no data found
+            answer_lower = answer.lower()
+            no_data_indicators = [
+                "couldn't find",
+                "no relevant",
+                "no information",
+                "don't have",
+                "not found"
+            ]
+            is_no_data = any(indicator in answer_lower for indicator in no_data_indicators)
+            
+            if is_no_data:
+                st.warning("⚠️ No Data Found")
                 st.info(answer)
+                st.caption("The system couldn't find relevant information in the dataset to answer this question.")
+            else:
+                st.success("✅ Answer:")
+                st.info(answer)
+            
+            # Store in session for history
+            if "history" not in st.session_state:
+                st.session_state.history = []
+            st.session_state.history.insert(0, {
+                "question": question, 
+                "answer": answer,
+                "no_data": is_no_data
+            })
                 
-                # Display confidence score with visual indicator
-                st.markdown("**Confidence:**")
-                confidence_label = "High" if confidence > 0.7 else "Medium" if confidence > 0.4 else "Low"
-                st.progress(confidence)
-                st.caption(f"{confidence_label}: {confidence:.1%} confidence")
-                
-                # Store in session for history
-                if "history" not in st.session_state:
-                    st.session_state.history = []
-                st.session_state.history.insert(0, {
-                    "question": question, 
-                    "answer": answer,
-                    "confidence": confidence
-                })
-                
-            except requests.exceptions.RequestException as e:
-                st.error(f"Error connecting to API: {str(e)}")
-            except Exception as e:
-                st.error(f"Error: {str(e)}")
+        except requests.exceptions.Timeout:
+            progress_placeholder.empty()
+            st.error("⏱️ Request timed out. The system is loading messages and computing embeddings. Please try again in a moment.")
+            st.info("💡 Tip: The first request for a new person/keyword combination may take 30-60 seconds.")
+        except requests.exceptions.RequestException as e:
+            progress_placeholder.empty()
+            st.error(f"Error connecting to API: {str(e)}")
+            st.info("Make sure the API server is running at " + API_URL)
+        except Exception as e:
+            progress_placeholder.empty()
+            st.error(f"Error: {str(e)}")
     else:
         st.warning("Please enter a question")
 
@@ -89,20 +110,36 @@ if "history" in st.session_state and st.session_state.history:
     st.divider()
     st.subheader("Recent Questions")
     for i, item in enumerate(st.session_state.history[:5]):  # Show last 5
-        confidence = item.get("confidence", 0.0)
-        confidence_label = "High" if confidence > 0.7 else "Medium" if confidence > 0.4 else "Low"
-        with st.expander(f"Q: {item['question']} [{confidence_label}: {confidence:.0%}]"):
-            st.write(f"**Answer:** {item['answer']}")
-            if "confidence" in item:
-                st.caption(f"Confidence: {item['confidence']:.1%}")
+        is_no_data = item.get("no_data", False)
+        status_icon = "⚠️" if is_no_data else "✅"
+        with st.expander(f"{status_icon} Q: {item['question']}"):
+            if is_no_data:
+                st.warning("**Answer:** " + item['answer'])
+                st.caption("No relevant data found in the dataset")
+            else:
+                st.write(f"**Answer:** {item['answer']}")
 
 # Footer
 st.divider()
 st.markdown("**API Endpoint:** " + API_URL)
 try:
     health_check = requests.get(f"{API_URL}/health", timeout=5)
-    status = "Online" if health_check.status_code == 200 else "Offline"
+    status = "🟢 Online" if health_check.status_code == 200 else "🔴 Offline"
+    
+    # Get system status
+    try:
+        status_response = requests.get(f"{API_URL}/status", timeout=5)
+        if status_response.status_code == 200:
+            status_data = status_response.json()
+            st.markdown(f"**Status:** {status}")
+            st.caption(f"Mode: {status_data.get('mode', 'unknown')} | "
+                      f"Embeddings: {'Ready' if status_data.get('embeddings_ready') else 'Not ready'} | "
+                      f"SLM: {'Ready' if status_data.get('slm_ready') else 'Not ready'}")
+        else:
+            st.markdown("**Status:** " + status)
+    except:
+        st.markdown("**Status:** " + status)
 except:
-    status = "Offline"
-st.markdown("**Status:** " + status)
+    status = "🔴 Offline"
+    st.markdown("**Status:** " + status)
 

@@ -52,3 +52,7 @@ htmlcov/
 # Docker
 .dockerignore
 
+# Cache
+.cache/
+*.pkl
+
