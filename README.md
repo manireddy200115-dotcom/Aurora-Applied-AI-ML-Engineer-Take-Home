@@ -111,22 +111,31 @@ The system is built with a modular architecture:
 
 - **`main.py`**: FastAPI application with endpoints
 - **`extractor.py`**: Fetches and caches data from the external API
-- **`qa.py`**: Core question-answering logic with multiple strategies
+- **`rag_qa.py`**: RAG-based QA system using semantic embeddings (ML) with keyword fallback
 - **`insights.py`**: Data analysis and anomaly detection
 
 ## Design Notes: Alternative Approaches
 
-### Approach 1: Rule-Based Pattern Matching (Current Implementation)
+### Approach 1: Semantic Search with Embeddings (Current Implementation) ✅
+**Implementation:** Using `sentence-transformers` with `all-MiniLM-L6-v2` model
+
 **Pros:**
-- Fast and lightweight
-- No external dependencies or API costs
-- Predictable and debuggable
-- Works well for structured queries
+- True ML-based semantic understanding
+- Handles synonyms and related concepts
+- No per-request API costs
+- Can find relevant information even with different wording
+- Falls back to keyword matching if embeddings unavailable
 
 **Cons:**
-- Limited to predefined patterns
-- Requires manual updates for new question types
-- May miss nuanced questions
+- Requires model download (~80MB) on first run
+- Slightly slower than pure keyword matching (but still fast)
+- Requires PyTorch dependency
+
+**How it works:**
+1. Converts questions and messages into vector embeddings using a neural network
+2. Calculates cosine similarity between question and all messages
+3. Returns the most semantically similar message
+4. Falls back to keyword matching if similarity is too low
 
 ### Approach 2: Large Language Model (LLM) Integration
 **Considered:** Using OpenAI GPT, Anthropic Claude, or open-source models like Llama 2
@@ -156,28 +165,30 @@ response = client.chat.completions.create(
 )
 ```
 
-### Approach 3: Semantic Search with Embeddings
-**Considered:** Using sentence transformers (e.g., `sentence-transformers`) to create embeddings
+### Approach 3: Semantic Search with Embeddings ✅ (IMPLEMENTED)
+**Status:** This is now the primary approach used in the system
 
-**Pros:**
-- Better semantic understanding than keyword matching
-- Can find relevant information even with different wording
-- No per-request costs
-- Can be run locally
-
-**Cons:**
-- Requires model download and setup
-- More complex implementation
-- Still needs answer extraction logic
-
-**Implementation would involve:**
+**Implementation:**
 ```python
 from sentence_transformers import SentenceTransformer
+import numpy as np
+
 model = SentenceTransformer('all-MiniLM-L6-v2')
-question_embedding = model.encode(question)
-message_embeddings = model.encode(messages)
-# Find most similar messages using cosine similarity
+question_embedding = model.encode(question, convert_to_numpy=True)
+message_embeddings = model.encode(messages, convert_to_numpy=True)
+
+# Calculate cosine similarity to find most relevant message
+similarities = np.dot(message_embeddings, question_embedding) / (
+    np.linalg.norm(message_embeddings, axis=1) * np.linalg.norm(question_embedding)
+)
+best_match = messages[np.argmax(similarities)]
 ```
+
+**Benefits:**
+- True semantic understanding (handles "trip" vs "journey", "car" vs "vehicle")
+- Better accuracy for nuanced questions
+- Cached embeddings for performance
+- Automatic fallback to keyword matching if needed
 
 ### Approach 4: Named Entity Recognition (NER) + Structured Queries
 **Considered:** Using spaCy or similar for entity extraction, then querying structured data
@@ -217,14 +228,18 @@ def answer(question):
 
 ### Why We Chose the Current Approach
 
-For this assessment, we chose **Approach 1 (Rule-Based)** because:
-1. **Simplicity**: Easy to understand and maintain
-2. **No Dependencies**: No external APIs or large models
-3. **Fast**: Sub-millisecond response times
-4. **Cost-Effective**: No per-request costs
-5. **Reliable**: Predictable behavior for the given examples
+We implemented **Approach 3 (Semantic Search with Embeddings)** because:
+1. **True ML/AI**: Uses neural network embeddings for semantic understanding
+2. **Better Accuracy**: Handles synonyms, related concepts, and different phrasings
+3. **No API Costs**: Runs locally with no per-request charges
+4. **Fast**: Embeddings are cached, making subsequent queries very fast
+5. **Robust Fallback**: Automatically falls back to keyword matching if needed
+6. **Production-Ready**: Lightweight model (all-MiniLM-L6-v2) balances speed and accuracy
 
-For a production system with more complex requirements, we would recommend **Approach 5 (Hybrid)**.
+The system now uses a **hybrid approach**:
+- **Primary**: Semantic embeddings for ML-based similarity search
+- **Fallback**: Keyword matching for edge cases or if embeddings unavailable
+- **Smart Caching**: Message embeddings are cached to avoid recomputation
 
 ## Data Insights
 
@@ -359,6 +374,9 @@ assessment_aurora/
 - **Uvicorn**: ASGI server
 - **Requests**: HTTP library for API calls
 - **Pydantic**: Data validation
+- **sentence-transformers**: ML library for semantic embeddings (core AI component)
+- **PyTorch**: Deep learning framework (required by sentence-transformers)
+- **NumPy**: Numerical computing for similarity calculations
 
 ## Performance Considerations
 
@@ -368,14 +386,16 @@ assessment_aurora/
 
 ## Future Improvements
 
-1. **Enhanced NLP**: Integrate transformer models for better understanding
-2. **Query Expansion**: Handle synonyms and related terms
-3. **Confidence Scores**: Return confidence levels with answers
-4. **Query History**: Track and learn from previous queries
+1. ✅ **Semantic Search**: Implemented with sentence-transformers
+2. **LLM Integration**: Add optional LLM for answer generation (e.g., GPT-4, Claude)
+3. **Confidence Scores**: Return similarity scores with answers
+4. **Query Expansion**: Handle synonyms and related terms (partially done via embeddings)
 5. **Multi-language Support**: Handle questions in multiple languages
-6. **Rate Limiting**: Implement rate limiting for production use
-7. **Authentication**: Add API key authentication
-8. **Monitoring**: Add logging and metrics collection
+6. **Vector Database**: Use a proper vector DB (e.g., Pinecone, Weaviate) for large datasets
+7. **Rate Limiting**: Implement rate limiting for production use
+8. **Authentication**: Add API key authentication
+9. **Monitoring**: Add logging and metrics collection
+10. **Fine-tuning**: Fine-tune embeddings on domain-specific data
 
 ## License
 

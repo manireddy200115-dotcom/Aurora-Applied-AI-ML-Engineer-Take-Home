@@ -7,7 +7,7 @@ from pydantic import BaseModel
 from typing import Optional
 import logging
 
-from app.qa import QASystem
+from app.rag_qa import RAGQASystem
 from app.extractor import DataExtractor
 from app.insights import DataInsights
 
@@ -32,7 +32,8 @@ app.add_middleware(
 
 # Initialize components
 extractor = DataExtractor()
-qa_system = QASystem(extractor)
+# Initialize QA system with SLM for answer generation
+qa_system = RAGQASystem(extractor, use_embeddings=True, use_slm=True)
 insights_analyzer = DataInsights(extractor)
 
 
@@ -42,6 +43,7 @@ class QuestionRequest(BaseModel):
 
 class AnswerResponse(BaseModel):
     answer: str
+    confidence: float
 
 
 @app.get("/")
@@ -72,12 +74,12 @@ async def ask_question(request: QuestionRequest):
         
         logger.info(f"Received question: {request.question}")
         
-        # Get answer from QA system
-        answer = qa_system.answer(request.question)
+        # Get answer and confidence from QA system
+        answer, confidence = qa_system.answer(request.question)
         
-        logger.info(f"Generated answer: {answer}")
+        logger.info(f"Generated answer: {answer} (confidence: {confidence:.3f})")
         
-        return AnswerResponse(answer=answer)
+        return AnswerResponse(answer=answer, confidence=confidence)
     
     except Exception as e:
         logger.error(f"Error processing question: {str(e)}", exc_info=True)

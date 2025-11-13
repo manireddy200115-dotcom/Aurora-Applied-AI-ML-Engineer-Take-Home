@@ -213,7 +213,6 @@ class DataInsights:
         }
         
         total_length = 0
-        locations = ['london', 'paris', 'tokyo', 'new york', 'san francisco']
         
         for msg in messages:
             msg_str = json.dumps(msg).lower()
@@ -223,8 +222,10 @@ class DataInsights:
             if re.search(r'\d{4}-\d{2}-\d{2}|\d{1,2}[/-]\d{1,2}[/-]\d{4}', msg_str):
                 patterns["contains_dates"] += 1
             
-            # Check for locations
-            if any(loc in msg_str for loc in locations):
+            # Check for locations dynamically (capitalized words after location prepositions)
+            # Pattern: "to/in/at/from [Capitalized Word]" suggests a location
+            location_pattern = r'\b(to|in|at|from|going to)\s+[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*'
+            if re.search(location_pattern, json.dumps(msg), re.IGNORECASE):
                 patterns["contains_locations"] += 1
             
             # Check for numbers
