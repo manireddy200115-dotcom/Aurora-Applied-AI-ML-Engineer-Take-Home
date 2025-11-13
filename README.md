@@ -116,7 +116,7 @@ The system is built with a modular architecture:
 
 ## Design Notes: Alternative Approaches
 
-### Approach 1: Semantic Search with Embeddings (Current Implementation) ✅
+### Approach 1: Semantic Search with Embeddings (Current Implementation)
 **Implementation:** Using `sentence-transformers` with `all-MiniLM-L6-v2` model
 
 **Pros:**
@@ -165,7 +165,7 @@ response = client.chat.completions.create(
 )
 ```
 
-### Approach 3: Semantic Search with Embeddings ✅ (IMPLEMENTED)
+### Approach 3: Semantic Search with Embeddings (IMPLEMENTED)
 **Status:** This is now the primary approach used in the system
 
 **Implementation:**
@@ -256,7 +256,7 @@ The system analyzes member messages for:
 
 Based on comprehensive analysis of the member data API (3,349 total messages, analyzing first 100):
 
-#### ✅ **Data Quality Strengths**
+#### **Data Quality Strengths**
 
 1. **Complete Field Coverage**
    - All messages have 100% field completeness
@@ -272,9 +272,9 @@ Based on comprehensive analysis of the member data API (3,349 total messages, an
    - No exact duplicate messages found in the sample
    - Each message has a unique `id` field
 
-#### ⚠️ **Anomalies and Inconsistencies Identified**
+#### **Anomalies and Inconsistencies Identified**
 
-1. **Future Date Anomaly** 🔴
+1. **Future Date Anomaly** (High Priority)
    - **Issue**: Many messages have timestamps in the future (dates beyond current date)
    - **Example**: Messages dated 2025-11-04 when current date is earlier
    - **Impact**: Could indicate test data, timezone issues, or data entry errors
@@ -283,7 +283,7 @@ Based on comprehensive analysis of the member data API (3,349 total messages, an
      - Implement timezone normalization
      - Flag future-dated messages for review
 
-2. **Pagination Limitation** 🟡
+2. **Pagination Limitation** (Medium Priority)
    - **Issue**: API returns only 100 messages per request despite having 3,349 total messages
    - **Current Behavior**: Only first 100 messages are accessible
    - **Impact**: 
@@ -294,24 +294,24 @@ Based on comprehensive analysis of the member data API (3,349 total messages, an
      - Use `?page=` or `?offset=` parameters if available
      - Fetch all messages in batches
 
-3. **Uneven User Distribution** 🟡
+3. **Uneven User Distribution** (Medium Priority)
    - **Issue**: Message distribution across users is uneven
    - **Finding**: Top user (Sophia Al-Farsi) has 16 messages, while some users have fewer
    - **Impact**: Answers may be biased toward more active users
    - **Recommendation**: Consider weighting or normalization for user representation
 
-4. **Date Range Span** 🟡
+4. **Date Range Span** (Medium Priority)
    - **Issue**: Date range spans from 2024-11-14 to 2025-11-04 (nearly 1 year span)
    - **Finding**: 91 unique dates in first 100 messages
    - **Impact**: Temporal queries may need date filtering
    - **Recommendation**: Implement date range filtering for time-sensitive queries
 
-5. **Message Length Variation** 🟢
+5. **Message Length Variation** (Low Priority)
    - **Finding**: Message lengths range from 47 to 84 characters (average: 63.6)
    - **Status**: Within normal range, no anomalies detected
    - **Note**: Very consistent message length suggests structured or templated messages
 
-#### 📊 **Statistical Summary**
+#### **Statistical Summary**
 
 - **Total Messages**: 3,349 (API total)
 - **Messages Analyzed**: 100 (sample)
@@ -322,7 +322,7 @@ Based on comprehensive analysis of the member data API (3,349 total messages, an
 - **Unique Dates**: 91 (in sample)
 - **Duplicate Messages**: 0
 
-#### 🔧 **Recommended Improvements**
+#### **Recommended Improvements**
 
 1. **Implement Pagination**: Fetch all messages, not just first 100
 2. **Date Validation**: Add checks for future dates and timezone handling
@@ -386,7 +386,7 @@ assessment_aurora/
 
 ## Future Improvements
 
-1. ✅ **Semantic Search**: Implemented with sentence-transformers
+1. **Semantic Search**: Implemented with sentence-transformers
 2. **LLM Integration**: Add optional LLM for answer generation (e.g., GPT-4, Claude)
 3. **Confidence Scores**: Return similarity scores with answers
 4. **Query Expansion**: Handle synonyms and related terms (partially done via embeddings)
