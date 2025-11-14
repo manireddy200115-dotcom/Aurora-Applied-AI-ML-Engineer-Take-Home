@@ -417,7 +417,6 @@ class RAGQASystem:
         if self.use_embeddings and self.embedding_model:
             try:
                 # Compute embeddings for relevant messages only
-                logger.debug(f"Computing embeddings for {len(relevant_messages)} relevant messages")
                 message_texts = [self._format_message(msg) for msg in relevant_messages]
                 message_embeddings = self.embedding_model.encode(
                     message_texts,
@@ -616,7 +615,6 @@ Question: {question}
 
 Answer:"""
                 
-                logger.debug(f"SLM prompt: {prompt[:200]}...")
                 
                 # Generate answer with flan-t5-small
                 # Use greedy decoding (do_sample=False) to avoid repetitive outputs
@@ -629,7 +627,6 @@ Answer:"""
                 )
                 
                 answer = result[0]['generated_text'].strip()
-                logger.debug(f"SLM generated answer: {answer}")
                 
                 # Clean up the answer - remove common prefixes
                 for prefix in ['answer:', 'Answer:', 'answer', 'Answer']:

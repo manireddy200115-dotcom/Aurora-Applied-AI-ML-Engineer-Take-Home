@@ -7,8 +7,8 @@ import json
 
 # Configuration
 # Use local API for testing, or set to deployed URL for production
-API_URL = "http://localhost:8000"  # Change to deployed URL if needed
-# API_URL = "https://aurora-applied-ai-ml-engineer-take-home.onrender.com"
+# API_URL = "http://localhost:8000"  # Local development
+API_URL = "https://aurora-applied-ai-ml-engineer-take-home.onrender.com"  # Deployed on Render
 
 # Page config
 st.set_page_config(
@@ -49,7 +49,7 @@ if st.button("Ask Question", type="primary", use_container_width=True):
     if question.strip():
         # Show progress message
         progress_placeholder = st.empty()
-        progress_placeholder.info("🔄 Processing question... Loading relevant messages and computing embeddings (this may take 60-120 seconds for first request)")
+        progress_placeholder.info("Processing question... Loading relevant messages and computing embeddings (this may take 60-120 seconds for first request)")
         
         try:
             # Increased timeout for on-demand message loading and embedding computation
@@ -76,11 +76,11 @@ if st.button("Ask Question", type="primary", use_container_width=True):
             is_no_data = any(indicator in answer_lower for indicator in no_data_indicators)
             
             if is_no_data:
-                st.warning("⚠️ No Data Found")
+                st.warning("No Data Found")
                 st.info(answer)
                 st.caption("The system couldn't find relevant information in the dataset to answer this question.")
             else:
-                st.success("✅ Answer:")
+                st.success("Answer:")
                 st.info(answer)
             
             # Store in session for history
@@ -94,8 +94,8 @@ if st.button("Ask Question", type="primary", use_container_width=True):
                 
         except requests.exceptions.Timeout:
             progress_placeholder.empty()
-            st.error("⏱️ Request timed out after 120 seconds. The system is loading messages and computing embeddings. Please try again in a moment.")
-            st.info("💡 Tip: The first request may take 60-120 seconds (downloads models, fetches messages, computes embeddings). Subsequent requests are much faster.")
+            st.error("Request timed out after 120 seconds. The system is loading messages and computing embeddings. Please try again in a moment.")
+            st.info("Tip: The first request may take 60-120 seconds (downloads models, fetches messages, computes embeddings). Subsequent requests are much faster.")
         except requests.exceptions.RequestException as e:
             progress_placeholder.empty()
             st.error(f"Error connecting to API: {str(e)}")
@@ -112,8 +112,8 @@ if "history" in st.session_state and st.session_state.history:
     st.subheader("Recent Questions")
     for i, item in enumerate(st.session_state.history[:5]):  # Show last 5
         is_no_data = item.get("no_data", False)
-        status_icon = "⚠️" if is_no_data else "✅"
-        with st.expander(f"{status_icon} Q: {item['question']}"):
+        status_prefix = "[No Data] " if is_no_data else "[Answer] "
+        with st.expander(f"{status_prefix}Q: {item['question']}"):
             if is_no_data:
                 st.warning("**Answer:** " + item['answer'])
                 st.caption("No relevant data found in the dataset")
@@ -125,7 +125,7 @@ st.divider()
 st.markdown("**API Endpoint:** " + API_URL)
 try:
     health_check = requests.get(f"{API_URL}/health", timeout=5)
-    status = "🟢 Online" if health_check.status_code == 200 else "🔴 Offline"
+    status = "Online" if health_check.status_code == 200 else "Offline"
     
     # Get system status
     try:
@@ -141,6 +141,6 @@ try:
     except:
         st.markdown("**Status:** " + status)
 except:
-    status = "🔴 Offline"
+    status = "Offline"
     st.markdown("**Status:** " + status)
 

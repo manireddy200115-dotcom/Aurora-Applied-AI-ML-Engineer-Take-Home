@@ -2,7 +2,7 @@
 
 A RAG-based question-answering system that answers natural-language questions about member data from a public API. The system uses semantic embeddings for retrieval and a Small Language Model (SLM) for answer generation, with robust anti-hallucination measures to ensure honest responses when data is unavailable.
 
-## 🎯 Goal
+## Goal
 
 Build a simple question-answering system that can answer natural-language questions about member data provided by our public API.
 
@@ -11,7 +11,7 @@ Build a simple question-answering system that can answer natural-language questi
   - "How many cars does Vikram Desai have?"
   - "What are Amira's favorite restaurants?"
 
-## 🚀 Quick Start
+## Quick Start
 
 ### Local Development
 
@@ -46,7 +46,7 @@ docker build -t member-qa-service .
 docker run -p 8000:8000 member-qa-service
 ```
 
-## 📡 API Endpoints
+## API Endpoints
 
 ### POST `/ask`
 
@@ -113,7 +113,7 @@ Manually refresh messages and recompute embeddings.
 }
 ```
 
-## 🏗️ Architecture
+## Architecture
 
 ### System Overview
 
@@ -138,9 +138,9 @@ Question → Extract Person/Keywords → Filter Messages → Compute Embeddings 
 Semantic Search → Validate Context → Generate Answer (SLM) → Validate Answer → Response
 ```
 
-## 🎨 Design Notes: Alternative Approaches
+## Design Notes: Alternative Approaches
 
-### Approach 1: RAG with Embeddings + SLM (Current Implementation) ✅
+### Approach 1: RAG with Embeddings + SLM (Current Implementation)
 
 **Implementation:**
 - Semantic embeddings (`sentence-transformers/all-MiniLM-L6-v2`) for retrieval
@@ -149,12 +149,12 @@ Semantic Search → Validate Context → Generate Answer (SLM) → Validate Answ
 - Multi-layer anti-hallucination validation
 
 **Pros:**
-- ✅ True semantic understanding (handles synonyms and related concepts)
-- ✅ Accurate retrieval even with different wording
-- ✅ Natural, fluent answer generation
-- ✅ No API costs (runs locally)
-- ✅ Never hallucinates - returns "no data found" when appropriate
-- ✅ Efficient (only processes relevant messages)
+- True semantic understanding (handles synonyms and related concepts)
+- Accurate retrieval even with different wording
+- Natural, fluent answer generation
+- No API costs (runs locally)
+- Never hallucinates - returns "no data found" when appropriate
+- Efficient (only processes relevant messages)
 
 **Cons:**
 - Requires model download (~500MB) on first run
@@ -174,11 +174,11 @@ This approach provides the best balance of accuracy, honesty, and efficiency. Th
 - Can handle questions not explicitly in the data
 
 **Cons:**
-- ❌ Requires API keys and costs per request
-- ❌ Slower response times
-- ❌ Less predictable outputs
-- ❌ Privacy concerns with external APIs
-- ❌ Higher risk of hallucination
+- Requires API keys and costs per request
+- Slower response times
+- Less predictable outputs
+- Privacy concerns with external APIs
+- Higher risk of hallucination
 
 **Why We Didn't Choose This:**
 Cost, privacy, and the risk of hallucination made this less suitable for this use case.
@@ -193,9 +193,9 @@ Cost, privacy, and the risk of hallucination made this less suitable for this us
 - Simple to implement
 
 **Cons:**
-- ❌ Misses semantic relationships (e.g., "car" vs "vehicle")
-- ❌ Poor handling of synonyms
-- ❌ Less accurate for nuanced questions
+- Misses semantic relationships (e.g., "car" vs "vehicle")
+- Poor handling of synonyms
+- Less accurate for nuanced questions
 
 **Why We Didn't Choose This:**
 Too limited for handling natural language variations.
@@ -210,9 +210,9 @@ Too limited for handling natural language variations.
 - Scalable
 
 **Cons:**
-- ❌ Adds complexity and external dependencies
-- ❌ Overkill for this dataset size (~3,300 messages)
-- ❌ Additional costs for hosted solutions
+- Adds complexity and external dependencies
+- Overkill for this dataset size (~3,300 messages)
+- Additional costs for hosted solutions
 
 **Why We Didn't Choose This:**
 The dataset size doesn't require a vector database, and it adds unnecessary complexity.
@@ -227,14 +227,14 @@ The dataset size doesn't require a vector database, and it adds unnecessary comp
 - No ML dependencies
 
 **Cons:**
-- ❌ Inflexible - can't handle variations
-- ❌ Requires manual pattern definition
-- ❌ Doesn't scale to new question types
+- Inflexible - can't handle variations
+- Requires manual pattern definition
+- Doesn't scale to new question types
 
 **Why We Didn't Choose This:**
 Too rigid for natural language questions.
 
-## 📊 Data Insights & Anomalies
+## Data Insights & Anomalies
 
 ### Key Finding: Example Questions Are Test Cases
 
@@ -242,42 +242,42 @@ The example questions provided in the task requirements are **intentionally desi
 
 | Question | Status in Dataset | System Response |
 |----------|------------------|-----------------|
-| "When is Layla planning her trip to London?" | ❌ No Layla messages mention London | "I couldn't find any relevant information..." |
-| "How many cars does Vikram Desai have?" | ❌ Messages mention car service, not ownership count | "I couldn't find specific information..." |
-| "What are Amira's favorite restaurants?" | ❌ No Amira messages found | "I couldn't find any relevant information..." |
+| "When is Layla planning her trip to London?" | No Layla messages mention London | "I couldn't find any relevant information..." |
+| "How many cars does Vikram Desai have?" | Messages mention car service, not ownership count | "I couldn't find specific information..." |
+| "What are Amira's favorite restaurants?" | No Amira messages found | "I couldn't find any relevant information..." |
 
 **This is by design** - the task tests whether the system:
-1. ✅ Handles missing data gracefully (doesn't hallucinate)
-2. ✅ Returns honest "no data found" messages
-3. ✅ Identifies anomalies in the dataset
+1. Handles missing data gracefully (doesn't hallucinate)
+2. Returns honest "no data found" messages
+3. Identifies anomalies in the dataset
 
 ### Detailed Analysis
 
 #### Question 1: "When is Layla planning her trip to London?"
 
 **Dataset Analysis:**
-- ✅ Found: 330 messages from Layla Kawaguchi
-- ✅ Found: 99 messages mentioning trips/travel
-- ✅ Found: Messages mentioning Santorini, Thailand, flights
-- ❌ Found: 0 messages mentioning London
-- ❌ Found: 0 messages with "planning" + "trip" together
+- Found: 330 messages from Layla Kawaguchi
+- Found: 99 messages mentioning trips/travel
+- Found: Messages mentioning Santorini, Thailand, flights
+- Found: 0 messages mentioning London
+- Found: 0 messages with "planning" + "trip" together
 
 **Conclusion:** Layla has trip-related messages, but **none mention London**. The question has no answer in the dataset.
 
 #### Question 2: "How many cars does Vikram Desai have?"
 
 **Dataset Analysis:**
-- ✅ Found: 30+ messages from Vikram Desai
-- ✅ Found: 6 messages mentioning "car" (about car service)
-- ❌ Found: 0 messages stating "I have X cars" or ownership count
+- Found: 30+ messages from Vikram Desai
+- Found: 6 messages mentioning "car" (about car service)
+- Found: 0 messages stating "I have X cars" or ownership count
 
 **Conclusion:** Messages mention car service but not car ownership count. No explicit answer available.
 
 #### Question 3: "What are Amira's favorite restaurants?"
 
 **Dataset Analysis:**
-- ❌ Found: 0 messages from Amira in accessible dataset
-- ❌ Found: 0 messages mentioning "Amira" + "restaurant"
+- Found: 0 messages from Amira in accessible dataset
+- Found: 0 messages mentioning "Amira" + "restaurant"
 
 **Conclusion:** Amira doesn't appear in the loaded messages. No data available.
 
@@ -295,7 +295,7 @@ The example questions provided in the task requirements are **intentionally desi
 - **Date Formats**: Standardized ISO format dates
 - **Message Distribution**: Uneven distribution across users (some users have many more messages)
 
-## 🛡️ Anti-Hallucination System
+## Anti-Hallucination System
 
 The system includes multiple validation layers to prevent hallucination:
 
@@ -306,7 +306,7 @@ The system includes multiple validation layers to prevent hallucination:
 
 **Result**: System never makes up answers - always returns honest "no data found" messages when information is unavailable.
 
-## 📁 Project Structure
+## Project Structure
 
 ```
 assessment_aurora/
@@ -325,7 +325,7 @@ assessment_aurora/
 └── DATA_ANALYSIS.md    # Detailed data analysis
 ```
 
-## 🧪 Testing
+## Testing
 
 ### Run Tests
 ```bash
@@ -342,7 +342,7 @@ pytest tests/
 python3 test_slm.py
 ```
 
-## 🚢 Deployment
+## Deployment
 
 The service can be deployed to any platform that supports Docker:
 
@@ -363,7 +363,7 @@ fly deploy
 ### Other Platforms
 Any platform supporting Docker containers will work. The service exposes port 8000.
 
-## ⚙️ Configuration
+## Configuration
 
 The system can be configured in `app/main.py`:
 
@@ -378,14 +378,14 @@ qa_system = RAGQASystem(
 )
 ```
 
-## 📈 Performance
+## Performance
 
 - **First Request**: 30-60 seconds (loads messages, computes embeddings)
 - **Subsequent Requests**: 1-3 seconds (uses cached data)
 - **On-Demand Loading**: Only processes 50-200 relevant messages per question
 - **Embedding Cache**: Persists to disk for fast restarts
 
-## 🔧 Dependencies
+## Dependencies
 
 - **FastAPI**: Web framework
 - **sentence-transformers**: Semantic embeddings
@@ -395,15 +395,15 @@ qa_system = RAGQASystem(
 - **streamlit**: Dashboard (optional)
 - **pytest**: Testing
 
-## 📝 License
+## License
 
 This project is created for assessment purposes.
 
-## 🔗 Links
+## Links
 
 - **API Documentation**: https://november7-730026606190.europe-west1.run.app/docs
 - **API Endpoint**: https://november7-730026606190.europe-west1.run.app/messages
 
-## 📧 Contact
+## Contact
 
 For questions or issues, please open an issue in the repository.

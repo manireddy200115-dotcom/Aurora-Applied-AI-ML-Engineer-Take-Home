@@ -37,7 +37,7 @@ extractor = DataExtractor()
 logger.info("Initializing QA system (messages loaded on-demand, SLM lazy-loaded)...")
 qa_system = RAGQASystem(extractor, use_embeddings=True, use_slm=True)
 
-logger.info("✓ System ready: Messages loaded on-demand, SLM will load on first use (saves memory)")
+logger.info("System ready: Messages loaded on-demand, SLM will load on first use (saves memory)")
 
 
 class QuestionRequest(BaseModel):
