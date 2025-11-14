@@ -61,6 +61,7 @@ class RAGQASystem:
         self.embedding_model = None
         self.message_embeddings = None
         self.messages = None
+        self._closest_name_suggestion = None  # Store closest name suggestion for mismatches
         
         if use_embeddings:
             try:
@@ -219,11 +220,68 @@ class RAGQASystem:
                 return name
         return None
     
+    def _find_closest_name(self, query_name: str, all_messages: List[Dict[str, Any]]) -> Optional[str]:
+        """
+        Find the closest matching name in the dataset using fuzzy matching.
+        Returns the closest name if similarity is above threshold, None otherwise.
+        """
+        if not query_name or not all_messages:
+            return None
+        
+        # Get all unique user names from messages
+        unique_names = set()
+        for msg in all_messages:
+            user_name = msg.get('user_name', '')
+            if user_name:
+                unique_names.add(user_name)
+        
+        if not unique_names:
+            return None
+        
+        query_lower = query_name.lower().strip()
+        query_first_name = query_lower.split()[0] if query_lower.split() else query_lower
+        
+        # First, try exact first name match
+        for name in unique_names:
+            name_lower = name.lower()
+            name_first = name_lower.split()[0] if name_lower.split() else name_lower
+            if query_first_name == name_first:
+                return name
+        
+        # If no exact match, try fuzzy matching using simple string similarity
+        from difflib import SequenceMatcher
+        
+        best_match = None
+        best_score = 0.0
+        threshold = 0.6  # Minimum similarity threshold
+        
+        for name in unique_names:
+            name_lower = name.lower()
+            name_first = name_lower.split()[0] if name_lower.split() else name_lower
+            
+            # Calculate similarity with first name
+            first_name_similarity = SequenceMatcher(None, query_first_name, name_first).ratio()
+            
+            # Calculate similarity with full name
+            full_name_similarity = SequenceMatcher(None, query_lower, name_lower).ratio()
+            
+            # Take the maximum similarity
+            similarity = max(first_name_similarity, full_name_similarity)
+            
+            if similarity > best_score and similarity >= threshold:
+                best_score = similarity
+                best_match = name
+        
+        return best_match
+    
     def _load_relevant_messages(self, question: str) -> List[Dict[str, Any]]:
         """
         Load only messages relevant to the question.
         Filters by person name AND keywords for better accuracy.
         """
+        # Reset closest name suggestion for each new question
+        self._closest_name_suggestion = None
+        
         # Extract person name from question
         person_name = self._extract_person_name(question)
         
@@ -303,6 +361,27 @@ class RAGQASystem:
                         unique.append(msg)
                 logger.info(f"Found {len(unique)} unique messages for {person_name}")
                 return unique[:200]
+            else:
+                # No exact match found - try to find closest name
+                closest_name = self._find_closest_name(person_name, all_messages)
+                if closest_name:
+                    logger.info(f"No exact match for '{person_name}', found closest match: '{closest_name}'")
+                    # Store closest name for later use in answer
+                    self._closest_name_suggestion = closest_name
+                    # Try filtering with closest name
+                    filtered = self.extractor.get_member_data(closest_name)
+                    if filtered:
+                        seen = set()
+                        unique = []
+                        for msg in filtered:
+                            msg_id = msg.get('id', '')
+                            msg_content = msg.get('message', '')
+                            key = (msg_id, msg_content)
+                            if key not in seen:
+                                seen.add(key)
+                                unique.append(msg)
+                        logger.info(f"Found {len(unique)} unique messages for closest match '{closest_name}'")
+                        return unique[:200]
         
         # Fallback: filter by keywords only
         if keywords:
@@ -680,6 +759,15 @@ Answer:"""
         retrieved = self._retrieve_top_k(question)
         
         if not retrieved:
+            # Check if we have a closest name suggestion
+            person_name = self._extract_person_name(question)
+            if person_name and self._closest_name_suggestion:
+                suggestion_msg = f" I couldn't find '{person_name}' in the dataset. Did you mean '{self._closest_name_suggestion}'?"
+                self._closest_name_suggestion = None  # Reset
+                return (
+                    "I couldn't find any relevant information in the member data to answer your question." + suggestion_msg,
+                    0.0
+                )
             return (
                 "I couldn't find any relevant information in the member data to answer your question.",
                 0.0
@@ -691,6 +779,14 @@ Answer:"""
         # STRICT validation: If similarity is low, messages are likely not relevant
         if top_similarity < 0.4:
             logger.warning(f"Low similarity score ({top_similarity:.3f}), likely no relevant data")
+            # Check if we have a closest name suggestion
+            if self._closest_name_suggestion:
+                suggestion_msg = f" I couldn't find '{self._extract_person_name(question)}' in the dataset. Did you mean '{self._closest_name_suggestion}'?"
+                self._closest_name_suggestion = None  # Reset
+                return (
+                    "I couldn't find any relevant information in the member data to answer your question." + suggestion_msg,
+                    0.0
+                )
             return (
                 "I couldn't find any relevant information in the member data to answer your question.",
                 0.0
@@ -699,6 +795,14 @@ Answer:"""
         # Validate context relevance BEFORE generating answer
         if not self._validate_context_relevance(question, retrieved):
             logger.warning("Retrieved messages are not relevant to the question")
+            # Check if we have a closest name suggestion
+            if self._closest_name_suggestion:
+                suggestion_msg = f" I couldn't find '{self._extract_person_name(question)}' in the dataset. Did you mean '{self._closest_name_suggestion}'?"
+                self._closest_name_suggestion = None  # Reset
+                return (
+                    "I couldn't find any relevant information in the member data to answer your question." + suggestion_msg,
+                    0.0
+                )
             return (
                 "I couldn't find any relevant information in the member data to answer your question.",
                 0.0

@@ -49,14 +49,15 @@ if st.button("Ask Question", type="primary", use_container_width=True):
     if question.strip():
         # Show progress message
         progress_placeholder = st.empty()
-        progress_placeholder.info("🔄 Processing question... Loading relevant messages and computing embeddings (this may take 30-60 seconds for first request)")
+        progress_placeholder.info("🔄 Processing question... Loading relevant messages and computing embeddings (this may take 60-120 seconds for first request)")
         
         try:
             # Increased timeout for on-demand message loading and embedding computation
+            # First request may take longer (120s) due to model loading and data fetching
             response = requests.post(
                 f"{API_URL}/ask",
                 json={"question": question},
-                timeout=60  # Increased to 60 seconds for on-demand processing
+                timeout=120  # 120 seconds for first request (model loading, message fetching, embedding computation)
             )
             progress_placeholder.empty()  # Clear progress message
             response.raise_for_status()
@@ -93,8 +94,8 @@ if st.button("Ask Question", type="primary", use_container_width=True):
                 
         except requests.exceptions.Timeout:
             progress_placeholder.empty()
-            st.error("⏱️ Request timed out. The system is loading messages and computing embeddings. Please try again in a moment.")
-            st.info("💡 Tip: The first request for a new person/keyword combination may take 30-60 seconds.")
+            st.error("⏱️ Request timed out after 120 seconds. The system is loading messages and computing embeddings. Please try again in a moment.")
+            st.info("💡 Tip: The first request may take 60-120 seconds (downloads models, fetches messages, computes embeddings). Subsequent requests are much faster.")
         except requests.exceptions.RequestException as e:
             progress_placeholder.empty()
             st.error(f"Error connecting to API: {str(e)}")
