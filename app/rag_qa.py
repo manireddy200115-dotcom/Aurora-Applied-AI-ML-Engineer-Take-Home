@@ -72,24 +72,12 @@ class RAGQASystem:
                 logger.warning(f"Failed to load embedding model: {e}. Falling back to keyword search.")
                 self.use_embeddings = False
         
-        # Initialize SLM for answer generation
+        # Initialize SLM for answer generation - LAZY LOADING
+        # Don't load at startup to save memory, load on first use
         self.slm_pipeline = None
-        if use_slm:
-            try:
-                logger.info(f"Loading SLM: {slm_model_name}")
-                tokenizer = AutoTokenizer.from_pretrained(slm_model_name)
-                model = AutoModelForSeq2SeqLM.from_pretrained(slm_model_name)
-                self.slm_pipeline = pipeline(
-                    "text2text-generation",
-                    model=model,
-                    tokenizer=tokenizer,
-                    device=0 if DEVICE == "cuda" else -1,
-                    max_length=512
-                )
-                logger.info("SLM loaded successfully")
-            except Exception as e:
-                logger.warning(f"Failed to load SLM: {e}. Falling back to template-based answers.")
-                self.use_slm = False
+        self.slm_model_name = slm_model_name if use_slm else None
+        self.use_slm = use_slm
+        self._slm_loaded = False  # Track if SLM has been loaded
         
         # Don't load all messages upfront - load on-demand based on questions
         # This is more efficient and accurate
@@ -549,6 +537,33 @@ class RAGQASystem:
         # Need at least 1-2 relevant messages
         return relevant_count >= 1
     
+    def _load_slm_if_needed(self):
+        """Lazy load SLM only when needed to save memory."""
+        if not self.use_slm or not self.slm_model_name:
+            return False
+        
+        if self._slm_loaded and self.slm_pipeline is not None:
+            return True
+        
+        try:
+            logger.info(f"Loading SLM: {self.slm_model_name} (lazy loading)")
+            tokenizer = AutoTokenizer.from_pretrained(self.slm_model_name)
+            model = AutoModelForSeq2SeqLM.from_pretrained(self.slm_model_name)
+            self.slm_pipeline = pipeline(
+                "text2text-generation",
+                model=model,
+                tokenizer=tokenizer,
+                device=0 if DEVICE == "cuda" else -1,
+                max_length=512
+            )
+            self._slm_loaded = True
+            logger.info("SLM loaded successfully")
+            return True
+        except Exception as e:
+            logger.warning(f"Failed to load SLM: {e}. Falling back to template-based answers.")
+            self.use_slm = False
+            return False
+    
     def _generate_answer_with_slm(
         self,
         question: str,
@@ -557,6 +572,7 @@ class RAGQASystem:
         """
         Generate answer using SLM from retrieved context.
         Only generates answer if context is actually relevant.
+        SLM is loaded lazily on first use to save memory.
         
         Args:
             question: The question to answer
@@ -580,6 +596,12 @@ class RAGQASystem:
             context_texts.append(self._format_message(msg))
         
         context = "\n".join(context_texts[:3])  # Use top 3 for context
+        
+        # Lazy load SLM if needed
+        if self.use_slm and self.slm_model_name:
+            if not self._load_slm_if_needed():
+                # SLM failed to load, use template fallback
+                return self._generate_template_answer(question, context_messages)
         
         if self.use_slm and self.slm_pipeline:
             try:

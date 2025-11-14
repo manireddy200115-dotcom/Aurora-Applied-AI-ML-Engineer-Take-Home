@@ -7,9 +7,9 @@ A RAG-based question-answering system that answers natural-language questions ab
 Build a simple question-answering system that can answer natural-language questions about member data provided by our public API.
 
 **Example Questions:**
-- "When is Layla planning her trip to London?"
-- "How many cars does Vikram Desai have?"
-- "What are Amira's favorite restaurants?"
+  - "When is Layla planning her trip to London?"
+  - "How many cars does Vikram Desai have?"
+  - "What are Amira's favorite restaurants?"
 
 ## 🚀 Quick Start
 
