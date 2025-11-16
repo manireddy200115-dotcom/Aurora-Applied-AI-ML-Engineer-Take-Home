@@ -349,6 +349,7 @@ The service can be deployed to any platform that supports Docker:
 ### Render
 - Connect your GitHub repository
 - Render will automatically detect `render.yaml` and deploy
+- **Deployed URL**: https://aurora-applied-ai-ml-engineer-take-home.onrender.com
 
 ### Railway
 - Connect your GitHub repository
@@ -401,6 +402,7 @@ This project is created for assessment purposes.
 
 ## Links
 
+- **Deployed Service (Render)**: https://aurora-applied-ai-ml-engineer-take-home.onrender.com
 - **API Documentation**: https://november7-730026606190.europe-west1.run.app/docs
 - **API Endpoint**: https://november7-730026606190.europe-west1.run.app/messages
 
